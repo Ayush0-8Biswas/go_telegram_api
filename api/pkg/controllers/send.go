@@ -31,7 +31,7 @@ func SendMessage(w http.ResponseWriter, r *http.Request) error {
 		b, _ := json.Marshal(resp)
 		_, err = w.Write(b)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
 	}
 	return nil
