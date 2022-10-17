@@ -5,18 +5,23 @@ import (
 	"fmt"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	models2 "go_telegram_api/app/pkg/models"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
 )
 
-func SendMessage(w http.ResponseWriter, r *http.Request) {
+func SendMessage(w http.ResponseWriter, r *http.Request) error {
+	err := r.ParseForm()
+	if err != nil {
+		fmt.Println("Error while parsing form.")
+		w.WriteHeader(http.StatusNotAcceptable)
+		return err
+	}
+
 	chatId, err := strconv.ParseInt(r.FormValue("chat_id"), 10, 64)
 	var msg = tgBotAPI.NewMessage(chatId, r.FormValue("text"))
 
 	resp, err := models2.TgAPI.Send(msg)
-
 	if err != nil {
 		fmt.Println("Error sending message")
 		log.Println(err)
@@ -29,44 +34,44 @@ func SendMessage(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 	}
+	return nil
 }
 
-func SendPhoto(w http.ResponseWriter, r *http.Request) {
+func SendPhoto(w http.ResponseWriter, r *http.Request) error {
 	err := r.ParseMultipartForm(1024 << 20)
 	if err != nil {
-		log.Println(err)
+		fmt.Println("Error while parsing form.")
 		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		return err
 	}
 
-	downFile, handler, err := r.FormFile("image")
+	downFile := r.MultipartForm.File["image"][0]
+	file, err := downFile.Open()
+	defer file.Close()
 	if err != nil {
-		fmt.Println("Error retrieving data from form-data")
-		log.Println(err)
+		fmt.Println("Error opening file")
 		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		return err
 	}
-	fileBytes, err := ioutil.ReadAll(downFile)
 
-	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
+	chatId, _ := strconv.ParseInt(r.MultipartForm.Value["chat_id"][0], 0, 0)
 
-	var msg = tgBotAPI.NewPhoto(chatId, tgBotAPI.FileBytes{
-		Name:  handler.Filename,
-		Bytes: fileBytes,
+	var msg = tgBotAPI.NewPhoto(chatId, tgBotAPI.FileReader{
+		Name:   downFile.Filename,
+		Reader: file,
 	})
 	msg.Caption = r.FormValue("caption")
 
 	rsp, err := models2.TgAPI.Send(msg)
-
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error sending message.")
 		w.WriteHeader(http.StatusInternalServerError)
 		b, _ := json.Marshal(err)
 		_, err = w.Write(b)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
-		return
+		return err
 	} else {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(rsp)
@@ -75,35 +80,33 @@ func SendPhoto(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 	}
+	return nil
 }
 
-func SendVideo(w http.ResponseWriter, r *http.Request) {
+func SendVideo(w http.ResponseWriter, r *http.Request) error {
 	err := r.ParseMultipartForm(1024 << 20)
 	if err != nil {
-		log.Println(err)
+		fmt.Println("Error while parsing form.")
 		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		return err
 	}
 
-	downFile, handler, err := r.FormFile("video")
+	downFile := r.MultipartForm.File["video"][0]
+	file, err := downFile.Open()
 	if err != nil {
-		fmt.Println("Error retrieving data from form-data")
-		log.Println(err)
-		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		fmt.Println("Error opening file.")
+		return err
 	}
-	fileBytes, err := ioutil.ReadAll(downFile)
 
 	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
 
-	var msg = tgBotAPI.NewVideo(chatId, tgBotAPI.FileBytes{
-		Name:  handler.Filename,
-		Bytes: fileBytes,
+	var msg = tgBotAPI.NewVideo(chatId, tgBotAPI.FileReader{
+		Name:   downFile.Filename,
+		Reader: file,
 	})
 	msg.Caption = r.FormValue("caption")
 
 	rsp, err := models2.TgAPI.Send(msg)
-
 	if err != nil {
 		fmt.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -112,7 +115,7 @@ func SendVideo(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println(err)
 		}
-		return
+		return err
 	} else {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(rsp)
@@ -121,134 +124,129 @@ func SendVideo(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 	}
+	return nil
 }
 
-func SendSticker(w http.ResponseWriter, r *http.Request) {
+func SendDocument(w http.ResponseWriter, r *http.Request) error {
 	err := r.ParseMultipartForm(1024 << 20)
 	if err != nil {
-		log.Println(err)
+		fmt.Println("Error while parsing form.")
 		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		return err
 	}
 
-	downFile, handler, err := r.FormFile("sticker")
+	downFile := r.MultipartForm.File["document"][0]
+	file, err := downFile.Open()
 	if err != nil {
-		fmt.Println("Error retrieving data from form-data")
-		log.Println(err)
-		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		fmt.Println("Error opening file.")
+		return err
 	}
-	fileBytes, err := ioutil.ReadAll(downFile)
 
 	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
 
-	var msg = tgBotAPI.NewSticker(chatId, tgBotAPI.FileBytes{
-		Name:  handler.Filename,
-		Bytes: fileBytes,
-	})
-
-	rsp, err := models2.TgAPI.Send(msg)
-
-	if err != nil {
-		fmt.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		b, _ := json.Marshal(err)
-		_, err = w.Write(b)
-		if err != nil {
-			log.Println(err)
-		}
-		return
-	} else {
-		w.WriteHeader(http.StatusOK)
-		b, _ := json.Marshal(rsp)
-		_, err = w.Write(b)
-		if err != nil {
-			log.Println(err)
-		}
-	}
-}
-
-func SendDocument(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseMultipartForm(1024 << 20)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusNotAcceptable)
-		return
-	}
-
-	downFile, handler, err := r.FormFile("document")
-	if err != nil {
-		fmt.Println("Error retrieving data from form-data")
-		log.Println(err)
-		w.WriteHeader(http.StatusNotAcceptable)
-		return
-	}
-	fileBytes, err := ioutil.ReadAll(downFile)
-
-	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
-
-	var msg = tgBotAPI.NewDocument(chatId, tgBotAPI.FileBytes{
-		Name:  handler.Filename,
-		Bytes: fileBytes,
+	var msg = tgBotAPI.NewDocument(chatId, tgBotAPI.FileReader{
+		Name:   downFile.Filename,
+		Reader: file,
 	})
 	msg.Caption = r.FormValue("caption")
 
 	rsp, err := models2.TgAPI.Send(msg)
 
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error sending message.")
 		w.WriteHeader(http.StatusNotModified)
 		b, _ := json.Marshal(err)
 		_, err = w.Write(b)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
-		return
+		return err
 	} else {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(rsp)
 		_, err = w.Write(b)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
 	}
+	return nil
 }
 
-func SendAudio(w http.ResponseWriter, r *http.Request) {
+func SendAudio(w http.ResponseWriter, r *http.Request) error {
 	err := r.ParseMultipartForm(1024 << 20)
 	if err != nil {
-		log.Println(err)
+		fmt.Println("Error parsing form.")
 		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		return err
 	}
 
-	downFile, handler, err := r.FormFile("audio")
+	downFile := r.MultipartForm.File["audio"][0]
+	file, err := downFile.Open()
 	if err != nil {
-		fmt.Println("Error retrieving data from form-data")
-		log.Println(err)
-		w.WriteHeader(http.StatusNotAcceptable)
-		return
+		fmt.Println("Error opening file.")
+		return err
 	}
-	fileBytes, err := ioutil.ReadAll(downFile)
 
 	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
 
-	var msg = tgBotAPI.NewAudio(chatId, tgBotAPI.FileBytes{
-		Name:  handler.Filename,
-		Bytes: fileBytes,
+	var msg = tgBotAPI.NewAudio(chatId, tgBotAPI.FileReader{
+		Name:   downFile.Filename,
+		Reader: file,
 	})
 
 	rsp, err := models2.TgAPI.Send(msg)
-
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error sending message.")
 		w.WriteHeader(http.StatusNotModified)
 		b, _ := json.Marshal(err)
 		_, err = w.Write(b)
 		if err != nil {
-			log.Println(err)
+			return err
 		}
-		return
+		return err
+	} else {
+		w.WriteHeader(http.StatusOK)
+		b, _ := json.Marshal(rsp)
+		_, err = w.Write(b)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func SendSticker(w http.ResponseWriter, r *http.Request) error {
+	err := r.ParseMultipartForm(1024 << 20)
+	if err != nil {
+		fmt.Println("Error while parsing form.")
+		w.WriteHeader(http.StatusNotAcceptable)
+		return err
+	}
+
+	downFile := r.MultipartForm.File["sticker"][0]
+	file, err := downFile.Open()
+	if err != nil {
+		fmt.Println("Error opening file.")
+		return err
+	}
+
+	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
+
+	var msg = tgBotAPI.NewSticker(chatId, tgBotAPI.FileReader{
+		Name:   downFile.Filename,
+		Reader: file,
+	})
+
+	rsp, err := models2.TgAPI.Send(msg)
+	if err != nil {
+		fmt.Println("Error sending message.")
+		w.WriteHeader(http.StatusInternalServerError)
+		b, _ := json.Marshal(err)
+		_, err = w.Write(b)
+		if err != nil {
+			return err
+		}
+		return err
 	} else {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(rsp)
@@ -257,8 +255,9 @@ func SendAudio(w http.ResponseWriter, r *http.Request) {
 			log.Println(err)
 		}
 	}
+	return nil
 }
 
-func SendContact(w http.ResponseWriter, r *http.Request) {
-
+func SendContact(w http.ResponseWriter, r *http.Request) error {
+	return nil
 }
