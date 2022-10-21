@@ -64,16 +64,10 @@ func HandlePhoto(mess *tgBotAPI.Message, dest string) error {
 	}
 	name += "*"
 
-	var caption string
-	if mess.Caption != "" {
-		caption = name + ": " + mess.Caption
-	} else {
-		caption = name + " sent an image."
-	}
-
 	sendQuery := map[string]interface{}{
 		"chat_id": dest,
-		"caption": caption,
+		"caption": mess.Caption,
+		"sender":  name,
 	}
 
 	for k, v := range sendQuery {
@@ -136,16 +130,10 @@ func HandleVideo(mess *tgBotAPI.Message, dest string) error {
 	}
 	name += "*"
 
-	var caption string
-	if mess.Caption != "" {
-		caption = name + ": " + mess.Caption
-	} else {
-		caption = name + " sent a video."
-	}
-
 	sendQuery := map[string]interface{}{
 		"chat_id": dest,
-		"caption": caption,
+		"caption": mess.Caption,
+		"sender":  name,
 	}
 
 	for k, v := range sendQuery {
@@ -208,16 +196,10 @@ func HandleDocument(mess *tgBotAPI.Message, dest string) error {
 	}
 	name += "*"
 
-	var caption string
-	if mess.Caption != "" {
-		caption = name + ": " + mess.Caption
-	} else {
-		caption = name + " sent a document."
-	}
-
 	sendQuery := map[string]interface{}{
 		"chat_id": dest,
-		"caption": caption,
+		"caption": mess.Caption,
+		"sender":  name,
 	}
 
 	for k, v := range sendQuery {
@@ -280,16 +262,9 @@ func HandleAudio(mess *tgBotAPI.Message, dest string) error {
 	}
 	name += "*"
 
-	var caption string
-	if mess.Caption != "" {
-		caption = name + ": " + mess.Caption
-	} else {
-		caption = name + " sent a audio."
-	}
-
 	sendQuery := map[string]interface{}{
 		"chat_id": dest,
-		"caption": caption,
+		"sender":  name,
 	}
 
 	for k, v := range sendQuery {
@@ -327,5 +302,66 @@ func HandleAudio(mess *tgBotAPI.Message, dest string) error {
 }
 
 func HandleSticker(mess *tgBotAPI.Message, dest string) error {
+	client := &http.Client{Timeout: time.Minute * 60}
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	fileUrl, err := models2.TgAPI.GetFileDirectURL(mess.Sticker.FileID)
+	if err != nil {
+		log.Println("Error getting direct url.")
+		return err
+	}
+
+	resp, err := client.Get(fileUrl)
+	if err != nil {
+		log.Println("Error getting file.")
+		return err
+	}
+
+	var name string = "*"
+	if mess.From.UserName != "" {
+		name += mess.From.UserName
+	} else {
+		name += mess.From.FirstName + mess.From.LastName
+	}
+	name += "*"
+
+	sendQuery := map[string]interface{}{
+		"chat_id": dest,
+		"sender":  name,
+	}
+
+	for k, v := range sendQuery {
+		fw, err := writer.CreateFormField(k)
+		_, err = io.Copy(fw, strings.NewReader(fmt.Sprint(v)))
+		if err != nil {
+			return err
+		}
+	}
+	fw, err := writer.CreateFormFile("sticker", fileUrl)
+	_, err = io.Copy(fw, resp.Body)
+	if err != nil {
+		fmt.Println("Error while copying data")
+		return err
+	}
+	err = writer.Close()
+	if err != nil {
+		fmt.Println("Error while closing writer.")
+		return err
+	}
+
+	req, err := http.NewRequest("POST", "http://localhost"+config.WhatsappPort+"/sendSticker/", body)
+	if err != nil {
+		fmt.Println("Error creating request.")
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err = client.Do(req)
+	if err != nil {
+		return err
+	}
+
+	log.Println(resp)
 	return nil
 }

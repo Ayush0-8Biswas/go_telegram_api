@@ -1,10 +1,15 @@
 package controllers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	tgBotAPI "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/sunshineplan/imgconv"
 	models2 "go_telegram_api/app/pkg/models"
+	"image/png"
+	"io/fs"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"strconv"
@@ -67,20 +72,13 @@ func SendPhoto(w http.ResponseWriter, r *http.Request) error {
 		fmt.Println("Error sending message.")
 		w.WriteHeader(http.StatusInternalServerError)
 		b, _ := json.Marshal(err)
-		_, err = w.Write(b)
-		if err != nil {
-			return err
-		}
-		return err
+		w.Write(b)
 	} else {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(rsp)
-		_, err = w.Write(b)
-		if err != nil {
-			log.Println(err)
-		}
+		w.Write(b)
 	}
-	return nil
+	return err
 }
 
 func SendVideo(w http.ResponseWriter, r *http.Request) error {
@@ -229,12 +227,36 @@ func SendSticker(w http.ResponseWriter, r *http.Request) error {
 		fmt.Println("Error opening file.")
 		return err
 	}
+	fmt.Println(downFile.Header.Get("sticker"))
 
 	chatId, _ := strconv.ParseInt(r.FormValue("chat_id"), 0, 0)
+	myImg, err := imgconv.Decode(file)
+	if err != nil {
+		fmt.Println("Error decoding file.")
+		w.WriteHeader(http.StatusNotAcceptable)
+		return err
+	}
 
-	var msg = tgBotAPI.NewSticker(chatId, tgBotAPI.FileReader{
-		Name:   downFile.Filename,
-		Reader: file,
+	fileBytes := new(bytes.Buffer)
+	//if err := png.Encode(fileBytes, myImg); err != nil {
+	//	fmt.Println("Error encoding file.")
+	//	w.WriteHeader(http.StatusInternalServerError)
+	//	return err
+	//}
+	if err := imgconv.Write(fileBytes, myImg, &imgconv.FormatOption{Format: imgconv.PNG, EncodeOption: []imgconv.EncodeOption{imgconv.PNGCompressionLevel(png.BestSpeed)}}); err != nil {
+		return err
+	}
+
+	//if err != nil {
+	//	fmt.Println("Error while resizing")
+	//	w.WriteHeader(http.StatusNotAcceptable)
+	//	return err
+	//}
+	ioutil.WriteFile("sticker.png", fileBytes.Bytes(), fs.ModeAppend)
+
+	var msg = tgBotAPI.NewSticker(chatId, tgBotAPI.FileBytes{
+		Name:  downFile.Filename,
+		Bytes: fileBytes.Bytes(),
 	})
 
 	rsp, err := models2.TgAPI.Send(msg)
@@ -242,20 +264,14 @@ func SendSticker(w http.ResponseWriter, r *http.Request) error {
 		fmt.Println("Error sending message.")
 		w.WriteHeader(http.StatusInternalServerError)
 		b, _ := json.Marshal(err)
-		_, err = w.Write(b)
-		if err != nil {
-			return err
-		}
-		return err
+		w.Write(b)
+
 	} else {
 		w.WriteHeader(http.StatusOK)
 		b, _ := json.Marshal(rsp)
-		_, err = w.Write(b)
-		if err != nil {
-			log.Println(err)
-		}
+		w.Write(b)
 	}
-	return nil
+	return err
 }
 
 func SendContact(w http.ResponseWriter, r *http.Request) error {
